@@ -32,7 +32,10 @@ COPY --from=builder /app/backend/dist backend/dist
 COPY --from=builder /app/backend/migrations backend/migrations
 COPY --from=frontend /app/frontend/dist frontend/dist
 WORKDIR /app/backend
-ENV NODE_ENV=production
+# paths.ts builds the app's public URLs (/api/<APP>, /apps/<APP>/) from this;
+# the server doesn't pass the name in.
+ARG APP
+ENV NODE_ENV=production APP=$APP
 # The app only reads its files, so it doesn't need root.
 USER node
 EXPOSE 3001

@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { migrate } from "./db.js";
+import read from "./read.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -12,6 +13,8 @@ app.use(express.json());
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+app.use("/api", read);
 
 // Don't take traffic until the schema is current. A failed migration exits so
 // the container restarts instead of serving on a stale schema.
