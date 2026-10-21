@@ -1,0 +1,29 @@
+:root {
+  color-scheme: light dark;
+  --bg: #fbf9f4;
+  --fg: #2b2a27;
+  --muted: #77736a;
+  --link: #2a5db0;
+  --rule: #d8d2c4;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1c1b19; --fg: #e6e2d9; --muted: #9a958a; --link: #8ab4f8; --rule: #3a3833; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 system-ui, sans-serif; }
+main { max-width: 600px; margin: 0 auto; padding: 64px 20px; }
+h1 { font-family: Charter, Georgia, serif; font-size: 2.2em; margin: 0 0 4px; }
+.muted { color: var(--muted); }
+a { color: var(--link); }
+form { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+input {
+  flex: 1 1 300px; font: inherit; padding: 10px 12px; color: var(--fg);
+  background: transparent; border: 1px solid var(--rule); border-radius: 6px;
+}
+button {
+  font: inherit; padding: 10px 18px; border: 0; border-radius: 6px;
+  background: var(--fg); color: var(--bg); cursor: pointer;
+}
+details { flex-basis: 100%; color: var(--muted); font-size: 0.9em; }
+details input { width: 100%; margin-top: 8px; }
+.bookmarklet { padding: 2px 8px; border: 1px dashed var(--rule); border-radius: 4px; text-decoration: none; }
