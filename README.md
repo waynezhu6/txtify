@@ -8,9 +8,10 @@ Built from [app-template](https://github.com/waynezhu6/app-template). Deployment
 
 ## Using it
 
-- Home page, https://waynezhu.dev/apps/txtify/: paste a URL. The first time on a browser, open "Access key" and enter `ACCESS_KEY`; it's then kept in a cookie.
+- Put the article link after the address: `https://waynezhu.dev/apps/txtify/https://example.com/article`. The first time on a browser it asks for `ACCESS_KEY`, then keeps it in a cookie.
+- Home page, https://waynezhu.dev/apps/txtify/: paste a URL.
 - Bookmarklet: drag "Read this" from the home page to your bookmarks bar, then click it on any article.
-- Directly: `https://waynezhu.dev/api/txtify/read?url=<article>` (add `&key=<ACCESS_KEY>` once per browser).
+- Without JavaScript: `https://waynezhu.dev/api/txtify/read?url=<article>` returns the whole page from the backend (add `&key=<ACCESS_KEY>` once per browser).
 
 ## Server configuration
 

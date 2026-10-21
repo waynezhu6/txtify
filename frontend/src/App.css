@@ -27,3 +27,19 @@ button {
 details { flex-basis: 100%; color: var(--muted); font-size: 0.9em; }
 details input { width: 100%; margin-top: 8px; }
 .bookmarklet { padding: 2px 8px; border: 1px dashed var(--rule); border-radius: 4px; text-decoration: none; }
+code { font-size: 0.85em; word-break: break-all; }
+
+/* The reader, matching the backend's /read page (page.ts). */
+main.reader { max-width: 680px; padding: 40px 20px 80px; font: 19px/1.65 Charter, "Iowan Old Style", Georgia, serif; }
+.reader nav, .reader .meta { font: 14px/1.5 system-ui, sans-serif; color: var(--muted); }
+.reader nav { margin-bottom: 24px; }
+.reader header { border-bottom: 1px solid var(--rule); margin-bottom: 28px; padding-bottom: 16px; }
+.reader h1 { font-size: 1.9em; line-height: 1.2; margin: 0 0 10px; }
+.reader img, .reader video { max-width: 100%; height: auto; }
+.reader figure { margin: 1.5em 0; }
+.reader figcaption { font-size: 0.8em; color: var(--muted); }
+.reader blockquote { margin: 1.2em 0; padding-left: 1em; border-left: 3px solid var(--rule); color: var(--muted); }
+.reader pre { overflow-x: auto; font-size: 0.8em; }
+.reader table { border-collapse: collapse; display: block; overflow-x: auto; }
+.reader td, .reader th { border: 1px solid var(--rule); padding: 4px 8px; }
+.reader form input { font-family: system-ui, sans-serif; }
