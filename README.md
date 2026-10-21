@@ -22,11 +22,10 @@ Besides the `DATABASE_URL` the infrastructure repo provides, the backend reads:
 | `ACCESS_KEY` | Access key you choose (any long random string). Required; without it every read is refused. |
 | `READ_LIMIT_PER_HOUR` | Cap on articles per hour across all users, to protect the API quota. Default 60. |
 
-On the server, append them to `~/infrastructure/secrets/txtify.env` and re-run this repo's Deploy workflow (Actions → Deploy → Run workflow):
+Set them as this repo's Actions secrets (Settings → Secrets and variables → Actions → New repository secret), then re-run the Deploy workflow (Actions → Deploy → Run workflow). Every repo secret reaches the backend as an environment variable of the same name. For `ACCESS_KEY`, a random string works well, and it's what you enter on the home page:
 
 ```bash
-printf 'RAPIDAPI_KEY=%s\nACCESS_KEY=%s\n' '<your rapidapi key>' "$(openssl rand -hex 24)" >> ~/infrastructure/secrets/txtify.env
-grep ACCESS_KEY ~/infrastructure/secrets/txtify.env   # the access key to enter on the home page
+openssl rand -hex 24
 ```
 
 ## Local dev
