@@ -22,7 +22,7 @@ Besides the `DATABASE_URL` the infrastructure repo provides, the backend reads:
 | `ACCESS_KEY` | Access key you choose (any long random string). Required; without it every read is refused. |
 | `READ_LIMIT_PER_HOUR` | Cap on articles per hour across all users, to protect the API quota. Default 60. |
 
-Set them as this repo's Actions secrets (Settings → Secrets and variables → Actions → New repository secret), then re-run the Deploy workflow (Actions → Deploy → Run workflow). Every repo secret reaches the backend as an environment variable of the same name. For `ACCESS_KEY`, a random string works well, and it's what you enter on the home page:
+Set them as this repo's Actions secrets (Settings → Secrets and variables → Actions → New repository secret), then re-run the Deploy workflow (Actions → Deploy → Run workflow). `.github/workflows/deploy.yml` hands each to the backend as an environment variable (add a line under `env` there for a new one, such as `READ_LIMIT_PER_HOUR`). For `ACCESS_KEY`, a random string works well, and it's what you enter on the home page:
 
 ```bash
 openssl rand -hex 24
