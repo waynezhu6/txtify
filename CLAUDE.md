@@ -11,7 +11,7 @@ Personal text-only article reader at `waynezhu.dev/apps/txtify/`. The frontend r
 - Database access goes through the pool in `backend/src/db.ts`; config comes from `DATABASE_URL` only.
 - Local dev: `docker compose -f docker-compose.dev.yml up -d`, `cp backend/.env.example backend/.env`, `npm run dev`, then open `http://localhost:5173/apps/<folder-name>/`.
 - After adding or upgrading a package, commit the updated root `package-lock.json`; CI and the Docker build use `npm ci`.
-- Server env beyond the template: `RAPIDAPI_KEY` and `ACCESS_KEY` (required), `READ_LIMIT_PER_HOUR` (default 60). They are this repo's Actions secrets, listed under `env` in the Deploy step of `deploy.yml`; never in this repo's files.
+- Server env beyond the template: `RAPIDAPI_KEY` and `ACCESS_KEY` (required), `READ_LIMIT_PER_HOUR` (default 60), `MONTHLY_API_LIMIT` (default 250, RapidAPI's free tier; `quota.ts`) and `CACHE_DAYS` (default 7; `cache.ts`). Every RapidAPI call must go through `reserveCall()` first, so the monthly cap can't be bypassed. They are this repo's Actions secrets, listed under `env` in the Deploy step of `deploy.yml`; never in this repo's files.
 - Article HTML from the API is untrusted: keep it going through `sanitize-html` in `page.ts` and keep the page's CSP.
 
 ## Don't change without a reason
