@@ -1,7 +1,9 @@
 # Built from the repo root (context: .) so npm can use the workspace lockfile.
 # One image carries the whole app: the backend runs from it, and the server's
 # deployer copies the built frontend out of /app/frontend/dist.
-FROM node:20.19-alpine AS builder
+# The build stages run on the CI runner's own platform (their output is plain
+# JS); only the final stage is built per target platform.
+FROM --platform=$BUILDPLATFORM node:20.19-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/
@@ -10,7 +12,7 @@ RUN npm ci --workspace=backend --include-workspace-root=false
 COPY backend backend
 RUN npm run build --workspace=backend
 
-FROM node:20.19-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:20.19-alpine AS frontend
 # The repo name: the frontend is built for waynezhu.dev/apps/<APP>/.
 ARG APP
 WORKDIR /app
