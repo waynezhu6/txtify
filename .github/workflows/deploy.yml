@@ -22,7 +22,9 @@ env:
 jobs:
   deploy:
     if: ${{ !github.event.repository.is_template }}
-    runs-on: ubuntu-latest
+    # The server is arm64, so build on an arm64 runner (free for public repos)
+    # and the image runs there as is.
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
@@ -44,11 +46,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Built for both amd64 and arm64, so the image runs whatever the server's
-      # CPU is.
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
       # One image holds the backend and the built frontend.
       - name: Build and push image
         id: build
@@ -57,22 +54,20 @@ jobs:
           context: .
           file: backend/Dockerfile
           build-args: APP=${{ env.APP }}
-          platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.APP }}-backend:latest
-          # No provenance attachments, so the versions pruned below are only
-          # images and their per-platform parts.
+          # One manifest per push, so each pruned version below is a whole
+          # image rather than a provenance attachment of the current one.
           provenance: false
 
       # Every push moves :latest and leaves the previous image untagged.
-      # Keep the newest few for rollbacks and delete the rest. Each push adds
-      # three versions (the image index plus one per platform).
+      # Keep the newest few for rollbacks and delete the rest.
       - name: Prune old images
         uses: actions/delete-package-versions@v5
         with:
           package-name: ${{ env.APP }}-backend
           package-type: container
-          min-versions-to-keep: 15
+          min-versions-to-keep: 5
 
       # The server pulls this exact image, starts it, checks /api/health and
       # publishes the frontend, rolling back if the health check fails. Its
