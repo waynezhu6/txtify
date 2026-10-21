@@ -69,10 +69,12 @@ jobs:
 
       # The server pulls this exact image, starts it, checks /api/health and
       # publishes the frontend, rolling back if the health check fails. Its
-      # output streams into this step. Every Actions secret of this repo
-      # reaches the backend as an environment variable of the same name.
+      # output streams into this step. Each env line hands one of this
+      # repo's Actions secrets to the backend as an environment variable.
       - name: Deploy
         uses: waynezhu6/infrastructure/actions/deploy@main
         with:
           digest: ${{ steps.build.outputs.digest }}
-          env: ${{ toJSON(secrets) }}
+          env: |
+            RAPIDAPI_KEY=${{ secrets.RAPIDAPI_KEY }}
+            ACCESS_KEY=${{ secrets.ACCESS_KEY }}
