@@ -1,12 +1,16 @@
 import { Router, type Request, type Response } from "express";
 import { timingSafeEqual } from "crypto";
 import { extract, ExtractError } from "./extract.js";
-import { articlePage, messagePage, CSP } from "./page.js";
+import { articlePage, messagePage, reading, CSP } from "./page.js";
 import { API_BASE } from "./paths.js";
 
-// GET /api/read?url=<article>[&key=<ACCESS_KEY>], public at <API_BASE>/read
+// Two ways to read an article, behind the same key and hourly cap:
+//   GET /api/article?url=<article>[&key=<ACCESS_KEY>]  JSON for the frontend's
+//       reader at <APP_BASE><article>
+//   GET /api/read?url=<article>[&key=<ACCESS_KEY>]     a whole HTML page, for
+//       direct use at <API_BASE>/read
 // The access key keeps strangers from spending the RapidAPI quota. Passing it
-// once as ?key= stores it in a cookie, so the bookmarklet needs only the url.
+// once as ?key= stores it in a cookie, so later calls need only the url.
 
 const COOKIE = "txtify_key";
 const LIMIT_PER_HOUR = Number(process.env.READ_LIMIT_PER_HOUR ?? 60);
@@ -52,47 +56,83 @@ function parseTarget(raw: unknown): URL | undefined {
   }
 }
 
-router.get("/read", async (req, res) => {
-  const expected = process.env.ACCESS_KEY;
-  if (!expected) {
-    return send(res, 503, messagePage("Not set up yet", "ACCESS_KEY is not set on the server."));
-  }
+function queryKey(req: Request): string | undefined {
+  return typeof req.query.key === "string" && req.query.key ? req.query.key : undefined;
+}
 
-  const queryKey = typeof req.query.key === "string" && req.query.key ? req.query.key : undefined;
-  if (queryKey !== undefined) {
-    if (!matches(queryKey, expected)) return send(res, 401, messagePage("Wrong key", "That access key isn't right."));
-    // Remember the key, then drop it from the address bar and history.
-    res.cookie(COOKIE, queryKey, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: API_BASE,
-      maxAge: 365 * 24 * 3_600_000,
-    });
+function remember(res: Response, key: string) {
+  res.cookie(COOKIE, key, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: API_BASE,
+    maxAge: 365 * 24 * 3_600_000,
+  });
+}
+
+type Refusal = { status: number; title: string; message: string; needKey?: boolean };
+
+// The server is set up and the caller has the key (a ?key= also sets the cookie).
+function authorize(req: Request, res: Response): Refusal | undefined {
+  const expected = process.env.ACCESS_KEY;
+  if (!expected) return { status: 503, title: "Not set up yet", message: "ACCESS_KEY is not set on the server." };
+
+  const key = queryKey(req);
+  if (key !== undefined) {
+    if (!matches(key, expected)) return { status: 401, title: "Wrong key", message: "That access key isn't right.", needKey: true };
+    remember(res, key);
+  } else if (!matches(cookieKey(req), expected)) {
+    return { status: 401, title: "Access key needed", message: "Enter your access key to read on this browser.", needKey: true };
+  }
+}
+
+// Everything short of calling the API: setup, key, url, cap.
+function check(req: Request, res: Response): { target: URL } | Refusal {
+  const refused = authorize(req, res);
+  if (refused) return refused;
+  const target = parseTarget(req.query.url);
+  if (!target) return { status: 400, title: "Not a web address", message: "Pass an http or https URL." };
+  if (overLimit()) return { status: 429, title: "Slow down", message: `txtify is capped at ${LIMIT_PER_HOUR} articles an hour.` };
+  return { target };
+}
+
+async function fetchArticle(target: URL) {
+  try {
+    return { article: await extract(target.href) };
+  } catch (err) {
+    if (!(err instanceof ExtractError)) console.error("read failed:", err);
+    return {
+      status: err instanceof ExtractError ? err.status : 500,
+      message: err instanceof ExtractError ? err.message : "Something went wrong.",
+    };
+  }
+}
+
+router.get("/article", async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  const checked = check(req, res);
+  if (!("target" in checked)) {
+    return res.status(checked.status).json({ error: checked.message, needKey: checked.needKey ?? false });
+  }
+  const result = await fetchArticle(checked.target);
+  if (!result.article) return res.status(result.status).json({ error: result.message, source: checked.target.href });
+  res.json(reading(result.article, checked.target.href));
+});
+
+router.get("/read", async (req, res) => {
+  // A key in the address bar goes into the cookie, then out of the URL and history.
+  if (queryKey(req) !== undefined) {
+    const refused = authorize(req, res);
+    if (refused) return send(res, refused.status, messagePage(refused.title, refused.message));
     const rest = new URLSearchParams(req.query as Record<string, string>);
     rest.delete("key");
     return res.redirect(303, `${API_BASE}/read?${rest}`);
   }
-  if (!matches(cookieKey(req), expected)) {
-    return send(res, 401, messagePage("Access key needed", "Enter your access key on the txtify home page first."));
-  }
-
-  const target = parseTarget(req.query.url);
-  if (!target) return send(res, 400, messagePage("Not a web address", "Pass an http or https URL as ?url=."));
-
-  if (overLimit()) {
-    return send(res, 429, messagePage("Slow down", `txtify is capped at ${LIMIT_PER_HOUR} articles an hour.`, target.href));
-  }
-
-  try {
-    const article = await extract(target.href);
-    send(res, 200, articlePage(article, target.href));
-  } catch (err) {
-    if (!(err instanceof ExtractError)) console.error("read failed:", err);
-    const status = err instanceof ExtractError ? err.status : 500;
-    const message = err instanceof ExtractError ? err.message : "Something went wrong.";
-    send(res, status, messagePage("Couldn't get the article", message, target.href));
-  }
+  const checked = check(req, res);
+  if (!("target" in checked)) return send(res, checked.status, messagePage(checked.title, checked.message));
+  const result = await fetchArticle(checked.target);
+  if (!result.article) return send(res, result.status, messagePage("Couldn't get the article", result.message, checked.target.href));
+  send(res, 200, articlePage(result.article, checked.target.href));
 });
 
 export default router;

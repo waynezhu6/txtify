@@ -1,6 +1,6 @@
 # txtify
 
-Personal text-only article reader at `waynezhu.dev/apps/txtify/`. `GET <API_BASE>/read?url=` (Express route `/api/read`) sends the URL to the Full-Text RSS API on RapidAPI and returns a sanitized reader page (`backend/src/read.ts`, `extract.ts`, `page.ts`). The frontend is only a URL box and bookmarklet. Built from [app-template](https://github.com/waynezhu6/app-template): React + Vite frontend, Express + Postgres backend, deployed by `.github/workflows/deploy.yml`. Server-side details (Caddy, Postgres, registration, secrets) live in the [infrastructure](https://github.com/waynezhu6/infrastructure) repo, not here.
+Personal text-only article reader at `waynezhu.dev/apps/txtify/`. The frontend reads the article URL from its own path (`<APP_BASE><article url>`) and renders `GET <API_BASE>/article?url=`, which sends the URL to the Full-Text RSS API on RapidAPI and returns sanitized JSON (`backend/src/read.ts`, `extract.ts`, `page.ts`). `GET <API_BASE>/read?url=` returns the same as a whole server-rendered page, for use without JS. Built from [app-template](https://github.com/waynezhu6/app-template): React + Vite frontend, Express + Postgres backend, deployed by `.github/workflows/deploy.yml`. Server-side details (Caddy, Postgres, registration, secrets) live in the [infrastructure](https://github.com/waynezhu6/infrastructure) repo, not here.
 
 ## Conventions
 

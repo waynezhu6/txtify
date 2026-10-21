@@ -12,7 +12,7 @@ export function escape(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-function clean(html: string): string {
+export function clean(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "figure", "figcaption", "picture"]),
     allowedAttributes: {
@@ -66,22 +66,33 @@ ${body}
 </html>`;
 }
 
-export function articlePage(a: Article, requested: string): string {
+const EMPTY = "<p>No article text came back for this page. It may be behind a hard paywall or rendered by JavaScript.</p>";
+
+// What a reader shows: plain-text title, meta and source; sanitized content.
+export interface Reading {
+  title: string;
+  meta: string[];
+  source: string;
+  content: string;
+}
+
+export function reading(a: Article, requested: string): Reading {
   const source = [a.effective_url, a.url].find((u) => u && /^https?:\/\//i.test(u)) ?? requested;
-  const title = a.title?.trim() || "Untitled";
   const meta = [a.author, a.domain, a.date ? a.date.slice(0, 10) : undefined, a.word_count ? `${a.word_count} words` : undefined]
     .filter(Boolean)
-    .map((s) => escape(String(s)))
-    .join(" · ");
+    .map(String);
   const content = clean(a.content ?? "");
-  const body = content.trim()
-    ? content
-    : "<p>No article text came back for this page. It may be behind a hard paywall or rendered by JavaScript.</p>";
+  return { title: a.title?.trim() || "Untitled", meta, source, content: content.trim() ? content : EMPTY };
+}
+
+export function articlePage(a: Article, requested: string): string {
+  const r = reading(a, requested);
+  const meta = r.meta.map(escape).join(" · ");
   return layout(
-    title,
-    `<header><h1>${escape(title)}</h1>
-<div class="meta">${meta ? `${meta} · ` : ""}<a href="${escape(source)}" rel="noopener noreferrer nofollow">Original</a></div></header>
-<article>${body}</article>`,
+    r.title,
+    `<header><h1>${escape(r.title)}</h1>
+<div class="meta">${meta ? `${meta} · ` : ""}<a href="${escape(r.source)}" rel="noopener noreferrer nofollow">Original</a></div></header>
+<article>${r.content}</article>`,
   );
 }
 
