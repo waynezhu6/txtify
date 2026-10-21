@@ -1,10 +1,12 @@
 import { Router, type Request, type Response } from "express";
 import { timingSafeEqual } from "crypto";
-import { extract, ExtractError } from "./extract.js";
+import { cached, store } from "./cache.js";
+import { extract, ExtractError, type Article } from "./extract.js";
 import { articlePage, messagePage, reading, CSP } from "./page.js";
 import { API_BASE } from "./paths.js";
+import { MONTHLY_API_LIMIT, nextFreeSlot, reserveCall } from "./quota.js";
 
-// Two ways to read an article, behind the same key and hourly cap:
+// Two ways to read an article, behind the same key and limits:
 //   GET /api/article?url=<article>[&key=<ACCESS_KEY>]  JSON for the frontend's
 //       reader at <APP_BASE><article>
 //   GET /api/read?url=<article>[&key=<ACCESS_KEY>]     a whole HTML page, for
@@ -35,8 +37,8 @@ function matches(given: string | undefined, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// One shared hourly budget: even with a valid key, a runaway loop can't drain
-// the quota. Sliding window, in memory; resets on restart, which is fine.
+// One shared hourly budget, on top of the monthly cap in quota.ts: even with a
+// valid key, a runaway loop can't drain the month in one go. Sliding window, in memory; resets on restart, which is fine.
 const recent: number[] = [];
 function overLimit(): boolean {
   const now = Date.now();
@@ -86,19 +88,32 @@ function authorize(req: Request, res: Response): Refusal | undefined {
   }
 }
 
-// Everything short of calling the API: setup, key, url, cap.
+// Everything short of fetching: setup, key, url.
 function check(req: Request, res: Response): { target: URL } | Refusal {
   const refused = authorize(req, res);
   if (refused) return refused;
   const target = parseTarget(req.query.url);
   if (!target) return { status: 400, title: "Not a web address", message: "Pass an http or https URL." };
-  if (overLimit()) return { status: 429, title: "Slow down", message: `txtify is capped at ${LIMIT_PER_HOUR} articles an hour.` };
   return { target };
 }
 
-async function fetchArticle(target: URL) {
+// From the cache if it's there; otherwise one RapidAPI call, if both the
+// hourly and the monthly budget allow it.
+async function fetchArticle(target: URL): Promise<{ article: Article } | { status: number; message: string }> {
   try {
-    return { article: await extract(target.href) };
+    const hit = cached(target.href);
+    if (hit) return { article: hit };
+
+    if (overLimit()) return { status: 429, message: `txtify is capped at ${LIMIT_PER_HOUR} new articles an hour.` };
+    if (!(await reserveCall())) {
+      const next = await nextFreeSlot();
+      const when = next ? ` The next one frees up ${next.toISOString().slice(0, 16).replace("T", " ")} UTC.` : "";
+      return { status: 429, message: `This month's ${MONTHLY_API_LIMIT} new articles are used up, to stay in RapidAPI's free tier.${when} Articles read before still open.` };
+    }
+
+    const article = await extract(target.href);
+    store(target.href, article);
+    return { article };
   } catch (err) {
     if (!(err instanceof ExtractError)) console.error("read failed:", err);
     return {
@@ -115,7 +130,7 @@ router.get("/article", async (req, res) => {
     return res.status(checked.status).json({ error: checked.message, needKey: checked.needKey ?? false });
   }
   const result = await fetchArticle(checked.target);
-  if (!result.article) return res.status(result.status).json({ error: result.message, source: checked.target.href });
+  if (!("article" in result)) return res.status(result.status).json({ error: result.message, source: checked.target.href });
   res.json(reading(result.article, checked.target.href));
 });
 
@@ -131,7 +146,7 @@ router.get("/read", async (req, res) => {
   const checked = check(req, res);
   if (!("target" in checked)) return send(res, checked.status, messagePage(checked.title, checked.message));
   const result = await fetchArticle(checked.target);
-  if (!result.article) return send(res, result.status, messagePage("Couldn't get the article", result.message, checked.target.href));
+  if (!("article" in result)) return send(res, result.status, messagePage("Couldn't get the article", result.message, checked.target.href));
   send(res, 200, articlePage(result.article, checked.target.href));
 });
 
