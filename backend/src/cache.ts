@@ -1,23 +1,29 @@
-import pool from "./db.js";
 import type { Article } from "./extract.js";
 
-// Fetched articles, by URL. A cached read costs no API call and doesn't count
-// toward either limit.
-const CACHE_DAYS = Number(process.env.CACHE_DAYS ?? 7);
+// Recently fetched articles, so reopening one (a reload, a double click) costs
+// no API call and doesn't count toward either limit. In memory only: entries
+// expire after CACHE_MINUTES, at most MAX_ENTRIES are kept, and a restart
+// empties it.
+const TTL_MS = Number(process.env.CACHE_MINUTES ?? 10) * 60_000;
+const MAX_ENTRIES = 100;
 
-export async function cached(url: string): Promise<Article | undefined> {
-  const { rows } = await pool.query<{ article: Article }>(
-    "SELECT article FROM article_cache WHERE url = $1 AND fetched_at > now() - make_interval(days => $2)",
-    [url, CACHE_DAYS],
-  );
-  return rows[0]?.article;
+// Map keeps insertion order, so the first key is always the oldest entry.
+const entries = new Map<string, { article: Article; at: number }>();
+
+function prune(now: number) {
+  for (const [url, entry] of entries) {
+    if (now - entry.at < TTL_MS && entries.size <= MAX_ENTRIES) break;
+    entries.delete(url);
+  }
 }
 
-export async function store(url: string, article: Article): Promise<void> {
-  await pool.query(
-    `INSERT INTO article_cache (url, article) VALUES ($1, $2)
-     ON CONFLICT (url) DO UPDATE SET article = EXCLUDED.article, fetched_at = now()`,
-    [url, article],
-  );
-  await pool.query("DELETE FROM article_cache WHERE fetched_at < now() - make_interval(days => $1)", [CACHE_DAYS]);
+export function cached(url: string): Article | undefined {
+  prune(Date.now());
+  return entries.get(url)?.article;
+}
+
+export function store(url: string, article: Article): void {
+  entries.delete(url);
+  entries.set(url, { article, at: Date.now() });
+  prune(Date.now());
 }

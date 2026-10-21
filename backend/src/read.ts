@@ -101,7 +101,7 @@ function check(req: Request, res: Response): { target: URL } | Refusal {
 // hourly and the monthly budget allow it.
 async function fetchArticle(target: URL): Promise<{ article: Article } | { status: number; message: string }> {
   try {
-    const hit = await cached(target.href);
+    const hit = cached(target.href);
     if (hit) return { article: hit };
 
     if (overLimit()) return { status: 429, message: `txtify is capped at ${LIMIT_PER_HOUR} new articles an hour.` };
@@ -112,7 +112,7 @@ async function fetchArticle(target: URL): Promise<{ article: Article } | { statu
     }
 
     const article = await extract(target.href);
-    await store(target.href, article);
+    store(target.href, article);
     return { article };
   } catch (err) {
     if (!(err instanceof ExtractError)) console.error("read failed:", err);

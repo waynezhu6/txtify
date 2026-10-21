@@ -15,13 +15,6 @@ export const up = (pgm) => {
     at: { type: "timestamptz", notNull: true, default: pgm.func("now()") },
   });
   pgm.createIndex("api_calls", "at");
-
-  // Articles already fetched, so reading one again costs nothing (cache.ts).
-  pgm.createTable("article_cache", {
-    url: { type: "text", primaryKey: true },
-    article: { type: "jsonb", notNull: true },
-    fetched_at: { type: "timestamptz", notNull: true, default: pgm.func("now()") },
-  });
 };
 
 /**
@@ -30,6 +23,5 @@ export const up = (pgm) => {
  * @returns {Promise<void> | void}
  */
 export const down = (pgm) => {
-  pgm.dropTable("article_cache");
   pgm.dropTable("api_calls");
 };
