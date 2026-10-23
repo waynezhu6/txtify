@@ -1,0 +1,5 @@
+# What txtify needs from the server, created by infrastructure's deployer on
+# each deploy (see infrastructure's README, "The app's infra.yml").
+
+# Postgres: counts RapidAPI calls for the monthly cap (quota.ts).
+postgres: true
