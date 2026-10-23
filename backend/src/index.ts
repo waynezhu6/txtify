@@ -25,6 +25,13 @@ try {
   process.exit(1);
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
+});
+
+// A deploy starts the new backend next to this one, then stops this one with
+// SIGTERM: finish the requests in flight and exit. Node running as PID 1 in
+// the container would otherwise ignore it and be killed mid-request.
+process.on("SIGTERM", () => {
+  server.close(() => process.exit(0));
 });

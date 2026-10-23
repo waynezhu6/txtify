@@ -7,7 +7,7 @@ Personal text-only article reader at `waynezhu.dev/apps/txtify/`. The frontend r
 - Backend is ESM TypeScript (`backend/src`, imports end in `.js`). Routes go under `/api/*`.
 - The app lives under a path prefix: frontend at `/apps/<name>/`, backend at `/api/<name>/` (Caddy strips it, so Express still sees `/api/...`). Never hardcode `/` or `/api` URLs: the frontend calls the backend via `api()`/`apiUrl()` in `frontend/src/api.ts`, and the backend uses `API_BASE`/`APP_BASE` from `backend/src/paths.ts` for redirects, links and cookie paths. Cookies use `path: API_BASE`, because all apps share one domain.
 - The backend listens on port 3001 and must keep the `/api/health` route.
-- Schema changes are migrations: `cd backend && npm run migrate:create -- <name>` (ES modules in `backend/migrations`). They run on startup before the server listens; never edit one that has shipped.
+- Schema changes are migrations: `cd backend && npm run migrate:create -- <name>` (ES modules in `backend/migrations`). They run on startup before the server listens; never edit one that has shipped. During a deploy the new version migrates while the old one is still serving, so a migration must not break the code before it: add freely, drop or rename only in a later deploy. Keep the SIGTERM handler in `backend/src/index.ts`, which lets the old version finish its requests.
 - Database access goes through the pool in `backend/src/db.ts`; config comes from `DATABASE_URL` only.
 - Local dev: `docker compose -f docker-compose.dev.yml up -d`, `cp backend/.env.example backend/.env`, `npm run dev`, then open `http://localhost:5173/apps/<folder-name>/`.
 - After adding or upgrading a package, commit the updated root `package-lock.json`; CI and the Docker build use `npm ci`.
