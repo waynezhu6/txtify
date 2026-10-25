@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
-import { api } from './api'
+import { api, loginUrl } from './api'
 
 // The article to read is the rest of the path: /apps/txtify/https://example.com/a?b=1.
 // Some proxies and clients squash "https://" to "https:/", so put it back.
@@ -24,54 +24,29 @@ interface Reading {
 type State =
   | { kind: 'loading' }
   | { kind: 'article'; reading: Reading }
-  | { kind: 'needKey'; error: string }
   | { kind: 'error'; error: string }
-
-function KeyForm({ onKey, autoFocus }: { onKey: (key: string) => void; autoFocus?: boolean }) {
-  const [key, setKey] = useState('')
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (key.trim()) onKey(key.trim())
-      }}
-    >
-      <input
-        type="password"
-        placeholder="Access key"
-        value={key}
-        onChange={(e) => setKey(e.target.value)}
-        autoComplete="current-password"
-        autoFocus={autoFocus}
-        required
-      />
-      <button type="submit">Continue</button>
-    </form>
-  )
-}
 
 function Reader({ url }: { url: string }) {
   const [state, setState] = useState<State>({ kind: 'loading' })
-  const [key, setKey] = useState('')
 
   useEffect(() => {
     let live = true
     const params = new URLSearchParams({ url })
-    if (key) params.set('key', key)
     setState({ kind: 'loading' })
     api(`/article?${params}`)
       .then(async (res) => {
         const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
         if (!live) return
         if (res.ok) setState({ kind: 'article', reading: body })
-        else if (body.needKey) setState({ kind: 'needKey', error: body.error })
+        // Sign in with the waynezhu.dev account, then come back to this article.
+        else if (body.signIn) location.replace(loginUrl())
         else setState({ kind: 'error', error: body.error ?? `HTTP ${res.status}` })
       })
       .catch(() => live && setState({ kind: 'error', error: "Couldn't reach the server." }))
     return () => {
       live = false
     }
-  }, [url, key])
+  }, [url])
 
   useEffect(() => {
     document.title = state.kind === 'article' ? state.reading.title : 'txtify'
@@ -83,12 +58,6 @@ function Reader({ url }: { url: string }) {
         <a href={BASE}>txtify</a>
       </nav>
       {state.kind === 'loading' && <p className="muted">Fetching the article…</p>}
-      {state.kind === 'needKey' && (
-        <>
-          <p>{state.error}</p>
-          <KeyForm onKey={setKey} autoFocus />
-        </>
-      )}
       {state.kind === 'error' && (
         <>
           <h1>Couldn't get the article</h1>
