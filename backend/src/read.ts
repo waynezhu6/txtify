@@ -1,18 +1,21 @@
 import { Router, type Request, type Response } from "express";
 import { timingSafeEqual } from "crypto";
+import { currentUser, loginUrl } from "./auth.js";
 import { cached, store } from "./cache.js";
 import { extract, ExtractError, type Article } from "./extract.js";
 import { articlePage, messagePage, reading, CSP } from "./page.js";
 import { API_BASE } from "./paths.js";
 import { MONTHLY_API_LIMIT, nextFreeSlot, reserveCall } from "./quota.js";
 
-// Two ways to read an article, behind the same key and limits:
-//   GET /api/article?url=<article>[&key=<ACCESS_KEY>]  JSON for the frontend's
-//       reader at <APP_BASE><article>
-//   GET /api/read?url=<article>[&key=<ACCESS_KEY>]     a whole HTML page, for
-//       direct use at <API_BASE>/read
-// The access key keeps strangers from spending the RapidAPI quota. Passing it
-// once as ?key= stores it in a cookie, so later calls need only the url.
+// Two ways to read an article, behind the same sign-in and limits:
+//   GET /api/article?url=<article>  JSON for the frontend's reader at
+//       <APP_BASE><article>
+//   GET /api/read?url=<article>     a whole HTML page, for direct use at
+//       <API_BASE>/read
+// Readers sign in with their waynezhu.dev account (auth.ts), which keeps
+// strangers from spending the RapidAPI quota. ACCESS_KEY, if set, still works
+// as ?key= (remembered in a cookie) for scripts and shortcuts that can't sign
+// in.
 
 const COOKIE = "txtify_key";
 const LIMIT_PER_HOUR = Number(process.env.READ_LIMIT_PER_HOUR ?? 60);
@@ -72,25 +75,30 @@ function remember(res: Response, key: string) {
   });
 }
 
-type Refusal = { status: number; title: string; message: string; needKey?: boolean };
+type Refusal = { status: number; title: string; message: string; signIn?: boolean };
 
-// The server is set up and the caller has the key (a ?key= also sets the cookie).
-function authorize(req: Request, res: Response): Refusal | undefined {
+// The caller is signed in, or has the access key (a ?key= also sets the cookie).
+async function authorize(req: Request, res: Response): Promise<Refusal | undefined> {
   const expected = process.env.ACCESS_KEY;
-  if (!expected) return { status: 503, title: "Not set up yet", message: "ACCESS_KEY is not set on the server." };
-
   const key = queryKey(req);
   if (key !== undefined) {
-    if (!matches(key, expected)) return { status: 401, title: "Wrong key", message: "That access key isn't right.", needKey: true };
+    if (!expected || !matches(key, expected)) return { status: 401, title: "Wrong key", message: "That access key isn't right." };
     remember(res, key);
-  } else if (!matches(cookieKey(req), expected)) {
-    return { status: 401, title: "Access key needed", message: "Enter your access key to read on this browser.", needKey: true };
+    return;
   }
+  if (expected && matches(cookieKey(req), expected)) return;
+  try {
+    if (await currentUser(req)) return;
+  } catch (err) {
+    console.error("Couldn't check sign-in:", err);
+    return { status: 503, title: "Sign-in is unavailable", message: "Couldn't check who you are. Try again in a minute." };
+  }
+  return { status: 401, title: "Sign in to read", message: "txtify is for signed-in readers.", signIn: true };
 }
 
 // Everything short of fetching: setup, key, url.
-function check(req: Request, res: Response): { target: URL } | Refusal {
-  const refused = authorize(req, res);
+async function check(req: Request, res: Response): Promise<{ target: URL } | Refusal> {
+  const refused = await authorize(req, res);
   if (refused) return refused;
   const target = parseTarget(req.query.url);
   if (!target) return { status: 400, title: "Not a web address", message: "Pass an http or https URL." };
@@ -125,9 +133,9 @@ async function fetchArticle(target: URL): Promise<{ article: Article } | { statu
 
 router.get("/article", async (req, res) => {
   res.set("Cache-Control", "private, no-store");
-  const checked = check(req, res);
+  const checked = await check(req, res);
   if (!("target" in checked)) {
-    return res.status(checked.status).json({ error: checked.message, needKey: checked.needKey ?? false });
+    return res.status(checked.status).json({ error: checked.message, signIn: checked.signIn ?? false });
   }
   const result = await fetchArticle(checked.target);
   if (!("article" in result)) return res.status(result.status).json({ error: result.message, source: checked.target.href });
@@ -137,13 +145,15 @@ router.get("/article", async (req, res) => {
 router.get("/read", async (req, res) => {
   // A key in the address bar goes into the cookie, then out of the URL and history.
   if (queryKey(req) !== undefined) {
-    const refused = authorize(req, res);
+    const refused = await authorize(req, res);
     if (refused) return send(res, refused.status, messagePage(refused.title, refused.message));
     const rest = new URLSearchParams(req.query as Record<string, string>);
     rest.delete("key");
     return res.redirect(303, `${API_BASE}/read?${rest}`);
   }
-  const checked = check(req, res);
+  const checked = await check(req, res);
+  // Signed out: sign in, then come straight back to this page.
+  if ("signIn" in checked && checked.signIn) return res.redirect(303, loginUrl(`${API_BASE}${req.url}`));
   if (!("target" in checked)) return send(res, checked.status, messagePage(checked.title, checked.message));
   const result = await fetchArticle(checked.target);
   if (!("article" in result)) return send(res, result.status, messagePage("Couldn't get the article", result.message, checked.target.href));
